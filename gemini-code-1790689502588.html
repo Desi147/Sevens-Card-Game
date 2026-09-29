@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>排七 (Sevens) - 麻將圍桌風格</title>
+    <style>
+        :root {
+            --felt-green: #1a4d2e;
+            --felt-dark: #0f331d;
+            --table-border: #4a2c11;
+            --gold: #f39c12;
+            --spade-color: #1e293b;
+            --heart-color: #e11d48;
+            --club-color: #0f766e;
+            --diamond-color: #d97706;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #0d1117;
+            color: #fff;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* 遊戲主容器：固定全螢幕比例 */
+        .game-container {
+            width: 100vw;
+            height: 100vh;
+            max-width: 1200px;
+            max-height: 800px;
+            background: radial-gradient(circle, var(--felt-green) 0%, var(--felt-dark) 100%);
+            border: 12px solid var(--table-border);
+            border-radius: 24px;
+            box-shadow: inset 0 0 50px rgba(0,0,0,0.8), 0 10px 30px rgba(0,0,0,0.5);
+            display: grid;
+            grid-template-rows: 90px 1fr 140px;
+            grid-template-columns: 180px 1fr 180px;
+            grid-template-areas:
+                "top-left    top-player    top-right"
+                "left-player central-table right-player"
+                "bottom-left user-player   bottom-right";
+            padding: 10px;
+            position: relative;
+            transform-origin: center center;
+            transition: transform 0.3s ease;
+        }
+
+        /* 📱 手機直立模式支援：當手機為直向時自動旋轉容器 90 度，確保介面不變形 */
+        @media screen and (max-width: 900px) and (orientation: portrait) {
+            .game-container {
+                width: 100vh;
+                height: 100vw;
+                transform: rotate(90deg);
+                border-radius: 0;
+                border-width: 6px;
+            }
+        }
+
+        /* 電腦玩家區域 */
+        .player-seat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            padding: 5px;
+        }
+
+        .seat-top { grid-area: top-player; }
+        .seat-left { grid-area: left-player; }
+        .seat-right { grid-area: right-player; }
+        .seat-user { grid-area: user-player; }
+
+        .player-card-info {
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 6px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .player-card-info.active {
+            border-color: var(--gold);
+            box-shadow: 0 0 15px var(--gold);
+            background: rgba(243, 156, 18, 0.2);
+        }
+
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #334155;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+            border: 2px solid #fff;
+        }
+
+        .stats {
+            font-size: 13px;
+            line-height: 1.2;
+        }
+
+        .stats .name { font-weight: bold; color: #f8fafc; }
+        .stats .score { color: #facc15; }
+
+        /* 手牌排版 */
+        .hand-cards {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 5px;
+        }
+
+        .user-hand {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            height: 90px;
+            width: 100%;
+        }
+
+        /* 撲克牌基礎樣式 */
+        .card {
+            width: 44px;
+            height: 64px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 3px 4px;
+            font-weight: bold;
+            font-size: 13px;
+            box-shadow: 1px 2px 5px rgba(0,0,0,0.3);
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .card.red { color: #dc2626; }
+        .card.black { color: #0f172a; }
+
+        /* 玩家手牌重疊 */
+        .user-hand .card {
+            margin-left: -18px;
+        }
+
+        .user-hand .card:first-child {
+            margin-left: 0;
+        }
+
+        /* 可出牌樣式：微幅上移 + 發光，保持圖層順序 */
+        .user-hand .card.playable {
+            transform: translateY(-10px);
+            border: 2px solid var(--gold);
+            box-shadow: 0 0 10px var(--gold);
+        }
+
+        .user-hand .card.playable:hover {
+            transform: translateY(-14px);
+        }
+
+        .user-hand .card.must-fold {
+            border: 2px solid #ef4444;
+            opacity: 0.8;
+        }
+
+        .user-hand .card.must-fold:hover {
+            transform: translateY(-8px);
+            opacity: 1;
+        }
+
+        /* 中央桌面：四花色檯面 */
+        .central-table {
+            grid-area: central-table;
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            gap: 6px;
+        }
+
+        .suit-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 2px 8px;
+            height: 23%;
+        }
+
+        .suit-label {
+            font-size: 20px;
+            width: 30px;
+            text-align: center;
+        }
+
+        .suit-cards {
+            display: flex;
+            flex: 1;
+            justify-content: space-between;
+            margin-left: 10px;
+        }
+
+        /* 中央排七卡槽 */
+        .slot {
+            width: 5.8%;
+            height: 52px;
+            border: 1px dashed rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.3);
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .slot.played {
+            border: none;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+        }
+
+        /* 邊界資訊面板 */
+        .control-panel {
+            grid-area: top-right;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+        }
+
+        .btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-size: 12px;
+        }
+
+        .btn:hover { background: #1d4ed8; }
+
+        /* 對局紀錄框 */
+        .log-box {
+            grid-area: bottom-left;
+            background: rgba(0,0,0,0.5);
+            border-radius: 8px;
+            padding: 8px;
+            font-size: 11px;
+            height: 100%;
+            width: 100%;
+            overflow-y: auto;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .log-box p { margin-bottom: 4px; color: #cbd5e1; }
+
+        /* 結算 Modal */
+        .modal {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-content {
+            background: #1e293b;
+            padding: 24px 32px;
+            border-radius: 16px;
+            border: 2px solid var(--gold);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .modal-content h2 { color: var(--gold); margin-bottom: 16px; }
+        .scoreboard { margin: 16px 0; text-align: left; font-size: 14px; }
+        .scoreboard-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #334155; }
+        .scoreboard-row.winner { color: #4ade80; font-weight: bold; }
+
+        /* 提示狀態資訊條 */
+        .status-bar {
+            position: absolute;
+            bottom: 15px;
+            right: 20px;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+
+<div class="game-container">
+    <!-- 電腦 2 (上方) -->
+    <div class="player-seat seat-top">
+        <div class="player-card-info" id="p2-info">
+            <div class="avatar">P2</div>
+            <div class="stats">
+                <div class="name">電腦 2</div>
+                <div class="score">蓋牌點數: <span id="p2-score">?</span></div>
+            </div>
+        </div>
+        <div class="hand-cards" id="p2-hand-count"></div>
+    </div>
+
+    <!-- 電腦 1 (左側) -->
+    <div class="player-seat seat-left">
+        <div class="player-card-info" id="p1-info">
+            <div class="avatar">P1</div>
+            <div class="stats">
+                <div class="name">電腦 1</div>
+                <div class="score">蓋牌點數: <span id="p1-score">?</span></div>
+            </div>
+        </div>
+        <div class="hand-cards" id="p1-hand-count"></div>
+    </div>
+
+    <!-- 中央桌面 4x13 軌道 -->
+    <div class="central-table" id="central-table"></div>
+
+    <!-- 電腦 3 (右側) -->
+    <div class="player-seat seat-right">
+        <div class="player-card-info" id="p3-info">
+            <div class="avatar">P3</div>
+            <div class="stats">
+                <div class="name">電腦 3</div>
+                <div class="score">蓋牌點數: <span id="p3-score">?</span></div>
+            </div>
+        </div>
+        <div class="hand-cards" id="p3-hand-count"></div>
+    </div>
+
+    <!-- 左下角 Log -->
+    <div class="log-box" id="log-box"></div>
+
+    <!-- 功能按鈕與控制 -->
+    <div class="control-panel">
+        <button class="btn" onclick="initGame()">重新開局</button>
+    </div>
+
+    <!-- 狀態資訊 -->
+    <div class="status-bar">
+        <span id="turn-hint">遊戲初始化中...</span>
+    </div>
+
+    <!-- 玩家 (下方) -->
+    <div class="player-seat seat-user">
+        <div class="player-card-info" id="p0-info">
+            <div class="avatar" style="background:#2563eb;">您</div>
+            <div class="stats">
+                <div class="name">玩家 (你)</div>
+                <div class="score">蓋牌點數: <span id="p0-score">0</span></div>
+            </div>
+        </div>
+        <div class="user-hand" id="user-hand"></div>
+    </div>
+</div>
+
+<!-- 遊戲結束結算彈窗 -->
+<div class="modal" id="result-modal">
+    <div class="modal-content">
+        <h2>🎉 遊戲結束 🎉</h2>
+        <div class="scoreboard" id="scoreboard"></div>
+        <button class="btn" style="width: 100%; padding: 10px; margin-top: 10px;" onclick="initGame()">再玩一局</button>
+    </div>
+</div>
+
+<script>
+    const SUITS = ["♠", "♥", "♣", "♦"];
+    const SUIT_CLASSES = ["black", "red", "black", "red"];
+    const RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+
+    let hands = [[], [], [], []]; // 0: Player, 1: AI1, 2: AI2, 3: AI3
+    let table = Array(4).fill(null).map(() => Array(13).fill(false));
+    let scores = [0, 0, 0, 0];
+    let currentTurn = 0;
+    let gameActive = false;
+
+    function createTableUI() {
+        const tableContainer = document.getElementById('central-table');
+        tableContainer.innerHTML = '';
+
+        for (let s = 0; s < 4; s++) {
+            const row = document.createElement('div');
+            row.className = 'suit-row';
+            
+            const suitLabel = document.createElement('div');
+            suitLabel.className = `suit-label ${SUIT_CLASSES[s]}`;
+            suitLabel.innerText = SUITS[s];
+            row.appendChild(suitLabel);
+
+            const suitCards = document.createElement('div');
+            suitCards.className = 'suit-cards';
+
+            for (let r = 0; r < 13; r++) {
+                const slot = document.createElement('div');
+                slot.className = 'slot';
+                slot.id = `slot-${s}-${r}`;
+                slot.innerText = RANKS[r];
+                suitCards.appendChild(slot);
+            }
+            row.appendChild(suitCards);
+            tableContainer.appendChild(row);
+        }
+    }
+
+    function initGame() {
+        document.getElementById('result-modal').classList.remove('show');
+        document.getElementById('log-box').innerHTML = '';
+        table = Array(4).fill(null).map(() => Array(13).fill(false));
+        scores = [0, 0, 0, 0];
+        updateScoresUI();
+        createTableUI();
+
+        let deck = [];
+        for (let i = 0; i < 52; i++) deck.push(i);
+        for (let i = deck.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [deck[i], deck[j]] = [deck[j], deck[i]];
+        }
+
+        hands = [[], [], [], []];
+        for (let i = 0; i < 52; i++) {
+            hands[i % 4].push(deck[i]);
+        }
+        for (let i = 0; i < 4; i++) {
+            hands[i].sort((a, b) => a - b);
+        }
+
+        for (let i = 0; i < 4; i++) {
+            if (hands[i].includes(6)) {
+                currentTurn = i;
+                break;
+            }
+        }
+
+        logMessage(`遊戲開始！由 ${getSeatName(currentTurn)} 擁有黑桃7 首發`);
+        
+        playCard(currentTurn, 6);
+        currentTurn = (currentTurn + 1) % 4;
+        
+        gameActive = true;
+        render();
+        processTurn();
+    }
+
+    function isPlayable(cardVal) {
+        const suit = Math.floor(cardVal / 13);
+        const rank = cardVal % 13;
+        if (rank === 6) return true;
+        if (rank < 6) return table[suit][rank + 1];
+        if (rank > 6) return table[suit][rank - 1];
+        return false;
+    }
+
+    function hasAnyPlayableCard(playerIdx) {
+        return hands[playerIdx].some(card => isPlayable(card));
+    }
+
+    function playCard(playerIdx, cardVal) {
+        const suit = Math.floor(cardVal / 13);
+        const rank = cardVal % 13;
+        
+        hands[playerIdx] = hands[playerIdx].filter(c => c !== cardVal);
+        table[suit][rank] = true;
+
+        const slot = document.getElementById(`slot-${suit}-${rank}`);
+        slot.className = `slot played card ${SUIT_CLASSES[suit]}`;
+        slot.innerHTML = `<div>${RANKS[rank]}</div><div>${SUITS[suit]}</div>`;
+
+        logMessage(`${getSeatName(playerIdx)} 打出了 ${SUITS[suit]}${RANKS[rank]}`);
+    }
+
+    function foldCard(playerIdx, cardVal) {
+        const rank = cardVal % 13;
+        const points = rank + 1;
+
+        hands[playerIdx] = hands[playerIdx].filter(c => c !== cardVal);
+        scores[playerIdx] += points;
+
+        logMessage(`${getSeatName(playerIdx)} 蓋了一張牌`);
+        updateScoresUI();
+    }
+
+    function aiTurn() {
+        if (!gameActive) return;
+
+        const p = currentTurn;
+        const playableCards = hands[p].filter(c => isPlayable(c));
+
+        if (playableCards.length > 0) {
+            playableCards.sort((a, b) => Math.abs((b % 13) - 6) - Math.abs((a % 13) - 6));
+            playCard(p, playableCards[0]);
+        } else {
+            hands[p].sort((a, b) => (a % 13) - (b % 13));
+            foldCard(p, hands[p][0]);
+        }
+
+        nextTurn();
+    }
+
+    function nextTurn() {
+        if (hands.every(h => h.length === 0)) {
+            endGame();
+            return;
+        }
+
+        currentTurn = (currentTurn + 1) % 4;
+        render();
+        processTurn();
+    }
+
+    function processTurn() {
+        highlightActivePlayer();
+        if (currentTurn !== 0 && gameActive) {
+            document.getElementById('turn-hint').innerText = `輪到 ${getSeatName(currentTurn)} 思考中...`;
+            setTimeout(aiTurn, 800);
+        } else if (currentTurn === 0 && gameActive) {
+            const canPlay = hasAnyPlayableCard(0);
+            document.getElementById('turn-hint').innerText = canPlay ? 
+                "輪到你的回合：請點擊亮起的可出牌！" : "你無牌可出：請點擊一張手牌進行蓋牌。";
+        }
+    }
+
+    function render() {
+        const userHandContainer = document.getElementById('user-hand');
+        userHandContainer.innerHTML = '';
+
+        const canPlayAny = hasAnyPlayableCard(0);
+
+        hands[0].forEach(cardVal => {
+            const suit = Math.floor(cardVal / 13);
+            const rank = cardVal % 13;
+            const playable = isPlayable(cardVal);
+
+            const cardEl = document.createElement('div');
+            cardEl.className = `card ${SUIT_CLASSES[suit]}`;
+            
+            if (canPlayAny && playable) {
+                cardEl.classList.add('playable');
+                cardEl.onclick = () => {
+                    if (currentTurn === 0) {
+                        playCard(0, cardVal);
+                        nextTurn();
+                    }
+                };
+            } else if (!canPlayAny) {
+                cardEl.classList.add('must-fold');
+                cardEl.onclick = () => {
+                    if (currentTurn === 0) {
+                        foldCard(0, cardVal);
+                        nextTurn();
+                    }
+                };
+            }
+
+            cardEl.innerHTML = `
+                <div>${RANKS[rank]}</div>
+                <div style="font-size:16px;">${SUITS[suit]}</div>
+            `;
+            userHandContainer.appendChild(cardEl);
+        });
+
+        for (let i = 1; i <= 3; i++) {
+            const pHand = document.getElementById(`p${i}-hand-count`);
+            if (pHand) {
+                pHand.innerHTML = `<span style="font-size:12px; color:#cbd5e1;">剩餘手牌: ${hands[i].length} 張</span>`;
+            }
+        }
+    }
+
+    function highlightActivePlayer() {
+        for (let i = 0; i < 4; i++) {
+            const info = document.getElementById(`p${i}-info`);
+            if (i === currentTurn) {
+                info.classList.add('active');
+            } else {
+                info.classList.remove('active');
+            }
+        }
+    }
+
+    function updateScoresUI() {
+        document.getElementById(`p0-score`).innerText = scores[0];
+        document.getElementById(`p1-score`).innerText = '?';
+        document.getElementById(`p2-score`).innerText = '?';
+        document.getElementById(`p3-score`).innerText = '?';
+    }
+
+    function endGame() {
+        gameActive = false;
+        const modal = document.getElementById('result-modal');
+        const scoreboard = document.getElementById('scoreboard');
+        
+        let minScore = Math.min(...scores);
+        let html = '';
+
+        for (let i = 0; i < 4; i++) {
+            const isWinner = scores[i] === minScore;
+            html += `
+                <div class="scoreboard-row ${isWinner ? 'winner' : ''}">
+                    <span>${getSeatName(i)} ${isWinner ? '👑 (勝者)' : ''}</span>
+                    <span>蓋牌總罰分: ${scores[i]} 分</span>
+                </div>
+            `;
+        }
+
+        scoreboard.innerHTML = html;
+        modal.classList.add('show');
+    }
+
+    function getSeatName(idx) {
+        return idx === 0 ? "玩家 (你)" : `電腦 ${idx}`;
+    }
+
+    function logMessage(msg) {
+        const box = document.getElementById('log-box');
+        const p = document.createElement('p');
+        p.innerText = msg;
+        box.appendChild(p);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    window.onload = initGame;
+</script>
+</body>
+</html>
